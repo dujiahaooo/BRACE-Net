@@ -73,6 +73,10 @@ Per-seed checkpoints and JSON logs are written to `--output-dir`. A `summary.jso
 
 80-dimensional log-Mel spectrograms computed at 16 kHz (25 ms window, 10 ms hop). SpecAugment (FrequencyMasking F=15, TimeMasking T=35) is applied during training only.
 
+## Blind Review Notice
+
+This repository is submitted for the double-blind review process. Author names, affiliations, and contact information will be added upon acceptance.
+
 ## Citation
 
 Anonymous
