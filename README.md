@@ -72,24 +72,10 @@ speech_commands/
 ```bash
 python trainers/train_gsc.py \
   --data-dir /path/to/speech_commands_v0.02 \
-  --output-dir outputs/gsc_v2_main \
-  --seeds 42 1234 2025
+  --output-dir outputs/gsc_v2_main 
 ```
 
-**Training configuration:**
-- Optimizer: AdamW with learning rate $10^{-3}$ and weight decay $10^{-4}$
-- Schedule: 5-epoch linear warmup, then cosine annealing to $10^{-5}$ over 300 epochs
-- Batch size: 128
-- Loss: OHEM cross-entropy (keep ratio 0.7) + label smoothing ($\epsilon=0.1$)
-- Data augmentation:
-  - SpecAugment: FrequencyMasking F=15, TimeMasking T=35
-  - Time shifting: ±100 ms
-  - Background noise mixing: probability 0.8
 
-**Outputs:**
-- Per-seed checkpoints: `outputs/gsc_v2_main/bracenet_seed{42,1234,2025}.pth`
-- Per-seed results: `outputs/gsc_v2_main/result_seed{42,1234,2025}.json`
-- Summary: `outputs/gsc_v2_main/summary.json` (aggregated over all seeds)
 
 Run `python trainers/train_gsc.py --help` for full list of command-line options.
 
