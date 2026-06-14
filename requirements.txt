@@ -1,7 +1,8 @@
-torch
-torchaudio
-numpy
-tqdm
-matplotlib
-scikit-learn
-soundfile
+torch>=2.0.0,<3.0.0
+torchaudio>=2.0.0,<3.0.0
+numpy>=1.21,<2.0.0
+tqdm>=4.62
+matplotlib>=3.5
+scikit-learn>=1.0
+soundfile>=0.12
+pandas>=1.3
