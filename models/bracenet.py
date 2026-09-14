@@ -154,11 +154,15 @@ class BCDualStreamBlock(nn.Module):
         use_tfca=True,
         use_ssn=True,
         use_extra_res=True,
+        topology="parallel",
     ):
         super().__init__()
+        if topology not in {"parallel", "local_then_tace", "tace_then_local"}:
+            raise ValueError(f"Unsupported topology: {topology}")
         self.use_dual = use_dual
         self.use_tfca = use_tfca
         self.use_extra_res = use_extra_res and use_dual
+        self.topology = topology
 
         freq_stride = stride[0] if isinstance(stride, (list, tuple)) else stride
         if in_channels != out_channels or freq_stride != 1:
@@ -169,7 +173,14 @@ class BCDualStreamBlock(nn.Module):
         else:
             self.shortcut_projection = nn.Identity()
 
-        self.local_branch = BCResBlock(in_channels, out_channels, block_index, stride)
+        if topology == "tace_then_local" and use_dual:
+            self.local_branch = BCResBlock(
+                out_channels, out_channels, block_index, (1, 1)
+            )
+        else:
+            self.local_branch = BCResBlock(
+                in_channels, out_channels, block_index, stride
+            )
 
         if use_dual:
             if use_tfca:
@@ -195,26 +206,36 @@ class BCDualStreamBlock(nn.Module):
             else:
                 self.post_norm = nn.BatchNorm2d(out_channels)
 
-            if self.use_extra_res:
-                self.extra_scale = nn.Parameter(torch.zeros(1))
-
     def forward(self, x):
         shortcut = self.shortcut_projection(x)
-        local_features = self.local_branch(x)
 
         if not self.use_dual:
-            return local_features
+            return self.local_branch(x)
 
-        if self.use_tfca:
-            global_features = self.global_branch(shortcut)
+        if self.topology == "tace_then_local":
+            context_features = self._context(shortcut)
+            local_features = self.local_branch(context_features) + context_features
+            first_features, second_features = context_features, local_features
         else:
-            global_features = self.global_branch(shortcut) * shortcut
+            local_features = self.local_branch(x)
+            if self.use_extra_res:
+                local_features = local_features + shortcut
+            context_input = (
+                local_features if self.topology == "local_then_tace" else shortcut
+            )
+            context_features = self._context(context_input)
+            first_features, second_features = local_features, context_features
 
-        fused = self.fusion(torch.cat([local_features, global_features], dim=1))
+        fused = self.fusion(
+            torch.cat([first_features, second_features], dim=1)
+        )
         fused = self.post_norm(fused)
-        if self.use_extra_res:
-            fused = fused + self.extra_scale * local_features
         return F.relu(fused + shortcut, inplace=True)
+
+    def _context(self, features):
+        if self.use_tfca:
+            return self.global_branch(features)
+        return self.global_branch(features) * features
 
 
 class BCDualNet(nn.Module):
@@ -227,8 +248,18 @@ class BCDualNet(nn.Module):
         use_ssn=True,
         use_extra_res=True,
         dual_start_stage=2,
+        dual_stages=None,
+        topology="parallel",
     ):
         super().__init__()
+        if dual_stages is not None:
+            dual_stages = tuple(dual_stages)
+            invalid_stages = sorted(set(dual_stages) - {0, 1, 2, 3})
+            if invalid_stages:
+                raise ValueError(f"Invalid 0-based stage indices: {invalid_stages}")
+            if len(set(dual_stages)) != len(dual_stages):
+                raise ValueError(f"Duplicate stage indices in dual_stages={dual_stages}")
+        self.dual_stages = dual_stages
         self.blocks_per_stage = [2, 2, 4, 4]
         self.channels = [base_c * 2, base_c, int(base_c * 1.5), base_c * 2, int(base_c * 2.5), base_c * 4]
         stride_stages = {1, 2}
@@ -242,7 +273,10 @@ class BCDualNet(nn.Module):
         self.stages = nn.ModuleList()
         for stage_index, num_blocks in enumerate(self.blocks_per_stage):
             use_stride = stage_index in stride_stages
-            use_dual_here = use_dual and stage_index >= dual_start_stage
+            if dual_stages is None:
+                use_dual_here = use_dual and stage_index >= dual_start_stage
+            else:
+                use_dual_here = use_dual and stage_index in set(dual_stages)
             blocks = nn.ModuleList()
             in_channels = self.channels[stage_index]
             out_channels = self.channels[stage_index + 1]
@@ -258,8 +292,17 @@ class BCDualNet(nn.Module):
                         use_tfca=use_tfca,
                         use_ssn=use_ssn,
                         use_extra_res=use_extra_res,
+                        topology=topology,
                     )
                 )
+                # The recovered legacy wrapper registers a transition shortcut
+                # even for non-dual stages, where its forward path is not used.
+                # Freeze those legacy-only tensors so every trainable parameter
+                # has a gradient without changing state_dict, initialization,
+                # parameter totals, or the forward graph.
+                if not use_dual_here:
+                    for parameter in blocks[-1].shortcut_projection.parameters():
+                        parameter.requires_grad_(False)
                 in_channels = out_channels
             self.stages.append(blocks)
 
