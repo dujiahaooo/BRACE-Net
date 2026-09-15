@@ -3,12 +3,8 @@
 BRACE-Net is a lightweight keyword-spotting model that combines a complete
 BCResBlock local representation with shortcut-conditioned Time–frequency Axis
 Coordinate Excitation (TACE), followed by learned feature fusion.
-
-This repository contains the BRACE-Net and BC-ResNet model definitions, the
-Google Speech Commands data pipeline, the training entry point, and the
-verification and profiling utilities used by the accompanying paper. It does
-not include audio datasets, checkpoints, generated experiment outputs, or
-paper source.
+The design preserves local spectro-temporal evidence while introducing
+axis-aware global context under a compact parameter budget.
 
 ## Configurations
 
