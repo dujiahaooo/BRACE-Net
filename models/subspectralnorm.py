@@ -1,6 +1,8 @@
 # Copyright (c) 2023 Qualcomm Technologies, Inc.
 # All Rights Reserved.
 # Source: https://github.com/Qualcomm-AI-research/bcresnet
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+# See the repository LICENSE file for the complete terms and disclaimer.
 
 import torch
 from torch import nn
